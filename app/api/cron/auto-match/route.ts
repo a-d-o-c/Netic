@@ -35,9 +35,9 @@ export async function GET(request: NextRequest) {
     
     // Search for each want
     for (const want of wants) {
-      const searchQuery = `${want.title} ${want.description || ''}`.trim()
+      const searchQuery = `${want.title || ''} ${want.description || ''}`.trim()
       
-      console.log(`Searching for: ${want.title}`)
+      console.log(`Searching for: ${want.title || 'Untitled'}`)
       
       // Search Trade Me
       const results = await tradeMeSearcher.search(

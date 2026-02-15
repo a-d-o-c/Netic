@@ -4,7 +4,6 @@ import { tradeMeSearcher } from '@/lib/trademe'
 import { sendMatchNotification } from '@/lib/email/resend'
 
 export const dynamic = 'force-dynamic'
-export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,13 +16,15 @@ export async function GET(request: NextRequest) {
     console.log('🔍 Starting auto-matcher cron job...')
     
     // Get all active wants with auto_search enabled
-    const { data: wants, error: wantsError } = await supabaseAdmin
+    const response = await supabaseAdmin
       .from('wants')
       .select('*')
       .eq('status', 'active')
       .eq('auto_search', true)
     
-    if (wantsError || !wants || wants.length === 0) {
+    const wants: any[] = response.data || []
+    
+    if (response.error || wants.length === 0) {
       console.log('No active wants to search')
       return NextResponse.json({ 
         success: true, 
@@ -34,11 +35,7 @@ export async function GET(request: NextRequest) {
     console.log(`Found ${wants.length} active wants to search`)
     
     let totalNewMatches = 0
-    const notifications: Array<{
-      email: string
-      wantTitle: string
-      matches: any[]
-    }> = []
+    const notifications: any[] = []
     
     // Search for each want
     for (const want of wants) {
@@ -60,15 +57,15 @@ export async function GET(request: NextRequest) {
       // Add new matches to database
       for (const result of results) {
         // Check if already exists
-        const { data: existing } = await supabaseAdmin
+        const existingCheck = await supabaseAdmin
           .from('matches')
           .select('id')
           .eq('want_id', want.id)
           .eq('url', result.url)
           .maybeSingle()
         
-        if (!existing) {
-          const { data: newMatch, error } = await supabaseAdmin
+        if (!existingCheck.data) {
+          const insertResult = await supabaseAdmin
             .from('matches')
             .insert({
               want_id: want.id,
@@ -83,8 +80,8 @@ export async function GET(request: NextRequest) {
             .select()
             .single()
           
-          if (!error && newMatch) {
-            newMatchesForWant.push(newMatch)
+          if (!insertResult.error && insertResult.data) {
+            newMatchesForWant.push(insertResult.data)
             totalNewMatches++
           }
         }

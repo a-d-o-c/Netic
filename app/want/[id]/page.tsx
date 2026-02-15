@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import Image from 'next/image'

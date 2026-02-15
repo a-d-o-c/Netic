@@ -3,6 +3,15 @@ import { supabase } from '@/lib/supabase'
 import { tradeMeSearcher } from '@/lib/trademe'
 import { sendMatchNotification } from '@/lib/email/resend'
 
+type Want = {
+  id: string
+  title: string
+  description: string | null
+  max_budget: number | null
+  contact_email: string
+  [key: string]: any
+}
+
 export async function GET(request: NextRequest) {
   try {
     // Verify cron secret (security)
@@ -14,11 +23,13 @@ export async function GET(request: NextRequest) {
     console.log('🔍 Starting auto-matcher cron job...')
     
     // Get all active wants with auto_search enabled
-    const { data: wants, error: wantsError } = await supabase
+    const { data, error: wantsError } = await supabase
       .from('wants')
       .select('*')
       .eq('status', 'active')
       .eq('auto_search', true)
+    
+    const wants = data as Want[] | null
     
     if (wantsError || !wants || wants.length === 0) {
       console.log('No active wants to search')
@@ -31,13 +42,13 @@ export async function GET(request: NextRequest) {
     console.log(`Found ${wants.length} active wants to search`)
     
     let totalNewMatches = 0
-    const notifications = []
+    const notifications: any[] = []
     
     // Search for each want
     for (const want of wants) {
-      const searchQuery = `${want.title || ''} ${want.description || ''}`.trim()
+      const searchQuery = `${want.title} ${want.description || ''}`.trim()
       
-      console.log(`Searching for: ${want.title || 'Untitled'}`)
+      console.log(`Searching for: ${want.title}`)
       
       // Search Trade Me
       const results = await tradeMeSearcher.search(
@@ -103,7 +114,7 @@ export async function GET(request: NextRequest) {
       await sendMatchNotification(
         notification.email,
         notification.wantTitle,
-        notification.matches.map(m => ({
+        notification.matches.map((m: any) => ({
           title: m.title,
           price: m.price,
           url: m.url,
@@ -116,7 +127,7 @@ export async function GET(request: NextRequest) {
       await supabase
         .from('matches')
         .update({ notified: true })
-        .in('id', notification.matches.map(m => m.id))
+        .in('id', notification.matches.map((m: any) => m.id))
     }
     
     console.log(`\n✅ Cron job complete:`)

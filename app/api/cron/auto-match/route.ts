@@ -1,16 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabaseAdmin } from '@/lib/supabase'
 import { tradeMeSearcher } from '@/lib/trademe'
 import { sendMatchNotification } from '@/lib/email/resend'
 
-type Want = {
-  id: string
-  title: string
-  description: string | null
-  max_budget: number | null
-  contact_email: string
-  [key: string]: any
-}
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,13 +17,11 @@ export async function GET(request: NextRequest) {
     console.log('🔍 Starting auto-matcher cron job...')
     
     // Get all active wants with auto_search enabled
-    const { data, error: wantsError } = await supabase
+    const { data: wants, error: wantsError } = await supabaseAdmin
       .from('wants')
       .select('*')
       .eq('status', 'active')
       .eq('auto_search', true)
-    
-    const wants = data as Want[] | null
     
     if (wantsError || !wants || wants.length === 0) {
       console.log('No active wants to search')
@@ -42,13 +34,17 @@ export async function GET(request: NextRequest) {
     console.log(`Found ${wants.length} active wants to search`)
     
     let totalNewMatches = 0
-    const notifications: any[] = []
+    const notifications: Array<{
+      email: string
+      wantTitle: string
+      matches: any[]
+    }> = []
     
     // Search for each want
     for (const want of wants) {
-      const searchQuery = `${want.title} ${want.description || ''}`.trim()
+      const searchQuery = `${want.title || ''} ${want.description || ''}`.trim()
       
-      console.log(`Searching for: ${want.title}`)
+      console.log(`Searching for: ${want.title || 'Untitled'}`)
       
       // Search Trade Me
       const results = await tradeMeSearcher.search(
@@ -63,29 +59,27 @@ export async function GET(request: NextRequest) {
       
       // Add new matches to database
       for (const result of results) {
-        const matchData = {
-          want_id: want.id,
-          source: 'trademe',
-          title: result.title,
-          price: result.price,
-          url: result.url,
-          location: result.location,
-          image_url: result.image_url,
-          notified: false,
-        }
-        
         // Check if already exists
-        const { data: existing } = await supabase
+        const { data: existing } = await supabaseAdmin
           .from('matches')
           .select('id')
           .eq('want_id', want.id)
           .eq('url', result.url)
-          .single()
+          .maybeSingle()
         
         if (!existing) {
-          const { data: newMatch, error } = await supabase
+          const { data: newMatch, error } = await supabaseAdmin
             .from('matches')
-            .insert([matchData])
+            .insert({
+              want_id: want.id,
+              source: 'trademe',
+              title: result.title,
+              price: result.price,
+              url: result.url,
+              location: result.location,
+              image_url: result.image_url,
+              notified: false,
+            })
             .select()
             .single()
           
@@ -101,7 +95,7 @@ export async function GET(request: NextRequest) {
         console.log(`  📧 Queueing email for ${newMatchesForWant.length} new matches`)
         notifications.push({
           email: want.contact_email,
-          wantTitle: want.title,
+          wantTitle: want.title || 'Your want',
           matches: newMatchesForWant,
         })
       }
@@ -111,23 +105,30 @@ export async function GET(request: NextRequest) {
     console.log(`\n📧 Sending ${notifications.length} email notifications...`)
     
     for (const notification of notifications) {
-      await sendMatchNotification(
-        notification.email,
-        notification.wantTitle,
-        notification.matches.map((m: any) => ({
-          title: m.title,
-          price: m.price,
-          url: m.url,
-          location: m.location,
-          source: m.source,
-        }))
-      )
-      
-      // Mark matches as notified
-      await supabase
-        .from('matches')
-        .update({ notified: true })
-        .in('id', notification.matches.map((m: any) => m.id))
+      try {
+        await sendMatchNotification(
+          notification.email,
+          notification.wantTitle,
+          notification.matches.map((m: any) => ({
+            title: m.title,
+            price: m.price,
+            url: m.url,
+            location: m.location,
+            source: m.source,
+          }))
+        )
+        
+        // Mark matches as notified
+        const matchIds = notification.matches.map((m: any) => m.id)
+        if (matchIds.length > 0) {
+          await supabaseAdmin
+            .from('matches')
+            .update({ notified: true })
+            .in('id', matchIds)
+        }
+      } catch (emailError) {
+        console.error(`Failed to send email to ${notification.email}:`, emailError)
+      }
     }
     
     console.log(`\n✅ Cron job complete:`)

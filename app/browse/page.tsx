@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabase'
 import WantCard from '@/components/WantCard'
-import OfferModal from '@/components/OfferModal'
 
 async function getAllWants() {
   const { data, error } = await supabase

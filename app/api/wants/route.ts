@@ -40,8 +40,8 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
     
     if (email) {
-      query = query.eq('contact_email', email)
-    }
+  query = query.ilike('contact_email', email)
+}
     
     const { data, error } = await query
     

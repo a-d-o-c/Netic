@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
       
       console.log(`  Found ${results.length} Trade Me results`)
       
-      const newMatchesForWant = []
+      const newMatchesForWant: any[] = []
       
       // Add new matches to database
       for (const result of results) {

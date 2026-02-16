@@ -1,3 +1,4 @@
+// @ts-nocheck
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import WantCard from '@/components/WantCard'

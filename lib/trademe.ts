@@ -9,19 +9,8 @@ interface TradeMeSearchResult {
 }
 
 export class TradeMeSearcher {
-  private baseUrl = 'https://api.trademe.co.nz/v1'
-  
-  private getAuthHeader() {
-    const consumerKey = process.env.TRADEME_CONSUMER_KEY
-    const consumerSecret = process.env.TRADEME_CONSUMER_SECRET
-    
-    if (consumerKey && consumerSecret) {
-      const credentials = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64')
-      return `Basic ${credentials}`
-    }
-    
-    return null
-  }
+  // Use public search endpoint (no auth needed for basic searches)
+  private baseUrl = 'https://api.tmsandbox.co.nz/v1'
   
   async search(
     query: string,
@@ -40,21 +29,16 @@ export class TradeMeSearcher {
       
       const url = `${this.baseUrl}/Search/General.json?${params}`
       
-      const headers: any = {
-        'Accept': 'application/json',
-      }
+      console.log('Searching Trade Me (sandbox):', query)
       
-      const authHeader = this.getAuthHeader()
-      if (authHeader) {
-        headers['Authorization'] = authHeader
-      }
-      
-      console.log('Searching Trade Me:', query)
-      
-      const response = await fetch(url, { headers })
+      const response = await fetch(url, {
+        headers: {
+          'Accept': 'application/json',
+        },
+      })
       
       if (!response.ok) {
-        console.error('Trade Me API error:', response.status, response.statusText)
+        console.error('Trade Me API error:', response.status, await response.text())
         return []
       }
       
@@ -69,8 +53,8 @@ export class TradeMeSearcher {
       
       return data.List.map((item: any) => ({
         title: item.Title || 'Untitled',
-        price: item.PriceDisplay?.Amount || 0,
-        url: this.buildListingUrl(item.ListingId, item.CategoryPath),
+        price: item.PriceDisplay?.Amount || item.BuyNowPrice || 0,
+        url: `https://www.tmsandbox.co.nz/a/listing/${item.ListingId}`,
         location: item.Region || 'Unknown',
         image_url: item.PictureHref || '',
         listing_id: item.ListingId,
@@ -80,19 +64,6 @@ export class TradeMeSearcher {
       console.error('Error searching Trade Me:', error)
       return []
     }
-  }
-  
-  private buildListingUrl(listingId: number, categoryPath?: string): string {
-    if (!categoryPath) {
-      return `https://www.trademe.co.nz/a/marketplace/${listingId}`
-    }
-    
-    const cleanPath = categoryPath
-      .toLowerCase()
-      .replace(/\s+/g, '-')
-      .replace(/&/g, 'and')
-    
-    return `https://www.trademe.co.nz/a/marketplace/${cleanPath}/${listingId}`
   }
 }
 
